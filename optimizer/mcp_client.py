@@ -48,22 +48,30 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         key="menu",
         label="获取门店菜单（含价格与可售状态）",
-        keywords=("menu", "菜品", "菜单", "商品", "列表", "list_dish", "get_menu",
-                  "search_menu", "product", "item", "catalog", "sku"),
+        keywords=("menu", "meal", "dish", "food", "catalog", "sku", "product",
+                  "菜品", "菜单", "餐品", "商品", "单品", "list_dish", "get_menu",
+                  "search_menu", "query_meals"),
         arg_hints={"store": ("store", "store_id", "storeId", "shop", "shopId", "poi", "门店")},
     ),
     Capability(
         key="coupon",
         label="获取可用优惠券与活动",
-        keywords=("coupon", "promotion", "优惠", "券", "活动", "discount", "activity",
-                  "deal", "offer", "随心配"),
+        keywords=("coupon", "promotion", "discount", "activity", "deal", "offer",
+                  "优惠", "券", "活动", "随心配", "促销"),
         arg_hints={"store": ("store", "store_id", "storeId", "shop", "shopId", "门店")},
     ),
     Capability(
         key="quote",
         label="试算购物车总价（不实际下单）",
-        keywords=("quote", "preview", "calc", "试算", "预估", "价格", "price",
-                  "estimate", "cart_preview", "预算"),
+        keywords=("quote", "preview", "calc", "calculate", "price", "estimate",
+                  "试算", "预估", "算价", "价格", "结算", "预算", "cart_preview"),
+        required=False,
+    ),
+    Capability(
+        key="nutrition",
+        label="获取餐品营养成分",
+        keywords=("nutrition", "nutrient", "calorie", "kcal",
+                  "营养", "热量", "成分"),
         required=False,
     ),
     Capability(
@@ -110,15 +118,18 @@ class MCPClient:
     """最小可用的 MCP 客户端。"""
 
     def __init__(self, transport: str = "stdio", command: Sequence[str] | None = None,
-                 url: str | None = None, timeout: float = 20.0, env: Mapping[str, str] | None = None):
+                 url: str | None = None, timeout: float = 20.0, env: Mapping[str, str] | None = None,
+                 headers: Mapping[str, str] | None = None):
         self.transport = transport
         self.command = list(command or [])
         self.url = url
         self.timeout = timeout
         self.env = {**os.environ, **(env or {})}
+        self.headers = dict(headers or {})
         self._proc: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._id = 0
+        self._session_id: str | None = None
         self._tools_cache: list[Mapping[str, Any]] | None = None
 
     # ---------- 生命周期 ----------
@@ -203,23 +214,37 @@ class MCPClient:
             raise MCPError("等待 MCP 响应超时")
 
     def _send_http(self, payload: Mapping[str, Any], expect_response: bool) -> Mapping[str, Any] | None:
+        """Streamable HTTP：POST JSON-RPC，响应可能是 JSON 也可能是 SSE 流。
+
+        麦当劳 MCP 用这种方式（https://mcp.mcd.cn），请求头必须带
+        Authorization: Bearer <token>，服务端可能下发 Mcp-Session-Id，
+        后续请求要原样带回。
+        """
         import urllib.request
         assert self.url
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
+        headers.update(self.headers)
+        if self._session_id:
+            headers["Mcp-Session-Id"] = self._session_id
+
         req = urllib.request.Request(
             self.url,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            sid = resp.headers.get("Mcp-Session-Id")
+            if sid:
+                self._session_id = sid
             raw = resp.read().decode("utf-8")
+
         if not expect_response:
             return None
-        # 部分实现返回 SSE 格式：data: {...}
-        body = raw.strip()
-        if body.startswith("data:"):
-            body = body.split("data:", 1)[1].strip()
-        msg = json.loads(body)
+        msg = _parse_sse_or_json(raw)
         if "error" in msg and msg.get("error"):
             raise MCPError(f"MCP 返回错误: {msg['error']}")
         return msg
@@ -317,16 +342,60 @@ def _try_json(text: str) -> Any | None:
         return None
 
 
+def _parse_sse_or_json(raw: str) -> Mapping[str, Any]:
+    """响应可能是纯 JSON，也可能是 SSE 流（多行 data: ...）。"""
+    raw = raw.strip()
+    if not raw:
+        raise MCPError("MCP 返回空响应")
+    if raw.startswith("{"):
+        return json.loads(raw)
+    objs: list[Mapping[str, Any]] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        body = line[5:].strip()
+        if not body:
+            continue
+        try:
+            objs.append(json.loads(body))
+        except json.JSONDecodeError:
+            continue
+    if not objs:
+        raise MCPError(f"无法解析 MCP 响应: {raw[:200]}")
+    for o in reversed(objs):
+        if "id" in o:
+            return o
+    return objs[-1]
+
+
 def client_from_env() -> MCPClient:
     """按环境变量构造客户端。
 
-    MCD_MCP_TRANSPORT = stdio | http      （默认 stdio）
+    MCD_MCP_TRANSPORT = stdio | http | streamablehttp   （默认 stdio）
     MCD_MCP_COMMAND   = 命令行，用 shlex 解析（stdio）
-    MCD_MCP_URL       = 端点地址（http）
+    MCD_MCP_URL       = 端点地址（http，麦当劳官方为 https://mcp.mcd.cn）
+    MCD_MCP_TOKEN     = MCP Token，会自动加上 Authorization: Bearer 头
+    MCD_MCP_HEADERS   = 额外的请求头，JSON 字符串（可选）
     """
     import shlex
     transport = os.environ.get("MCD_MCP_TRANSPORT", "stdio").strip().lower()
-    if transport == "http":
-        return MCPClient(transport="http", url=os.environ.get("MCD_MCP_URL"))
+
+    headers: dict[str, str] = {}
+    token = os.environ.get("MCD_MCP_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    extra = os.environ.get("MCD_MCP_HEADERS", "").strip()
+    if extra:
+        try:
+            headers.update(json.loads(extra))
+        except json.JSONDecodeError:
+            pass
+
+    if transport in ("http", "streamablehttp", "streamable-http"):
+        return MCPClient(transport="http",
+                         url=os.environ.get("MCD_MCP_URL", "https://mcp.mcd.cn"),
+                         headers=headers)
     cmd = os.environ.get("MCD_MCP_COMMAND", "")
-    return MCPClient(transport="stdio", command=shlex.split(cmd) if cmd else None)
+    return MCPClient(transport="stdio", command=shlex.split(cmd) if cmd else None,
+                     headers=headers)

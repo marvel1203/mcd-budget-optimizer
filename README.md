@@ -69,13 +69,26 @@ python3 -m unittest discover -s tests -t . -p "test_*.py"
 
 ## 接麦当劳 MCP
 
-```bash
-export MCD_MCP_TRANSPORT=stdio
-export MCD_MCP_COMMAND="npx -y <麦当劳 MCP 包名>"
+麦当劳 MCP 是远程托管的 **Streamable HTTP** 服务，地址 `https://mcp.mcd.cn`，
+需要在请求头带 MCP Token。Token 到 [open.mcd.cn/mcp](https://open.mcd.cn/mcp)
+手机号登录后控制台激活，免费。
 
-python3 scripts/fetch_menu.py --out cache/menu.json   # 拉快照
+```bash
+export MCD_MCP_TOKEN="<你的 MCP Token>"        # 千万别写进代码或提交到仓库
+
+export MCD_MCP_TRANSPORT=streamablehttp
+export MCD_MCP_URL="https://mcp.mcd.cn"       # 默认值，可省略
+
+python3 scripts/fetch_menu.py --out cache/menu.json   # 拉一份快照
 python3 -m optimizer.cli --from-mcp --people 3 --budget 90 --verbose
 ```
+
+Token 只从环境变量读取，程序会自动加 `Authorization: Bearer` 头，
+并跟随服务端下发的 `Mcp-Session-Id`。仓库里的 `mcp-config.example.json`
+只含环境变量占位符，没有任何真实凭证。
+
+本地 stdio 形式的 MCP 也可以：`MCD_MCP_TRANSPORT=stdio` +
+`MCD_MCP_COMMAND="你的启动命令"`。
 
 ### 为什么工具名不用你管
 

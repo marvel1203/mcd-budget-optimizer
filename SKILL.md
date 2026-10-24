@@ -25,16 +25,16 @@ version: 1.0.0
 
 ## 前置条件
 
-需要配置麦当劳 MCP。支持两种传输，用环境变量告诉本 Skill：
+需要麦当劳 MCP 的 Token。到 https://open.mcd.cn/mcp 手机号登录后，
+在控制台点「激活」申请（免费）。
+
+麦当劳 MCP 是远程 Streamable HTTP 服务（`https://mcp.mcd.cn`），
+用环境变量把地址和 Token 告诉本 Skill：
 
 ```bash
-# stdio（默认）
-export MCD_MCP_TRANSPORT=stdio
-export MCD_MCP_COMMAND="npx -y <麦当劳 MCP 包名>"
-
-# 或者 http
-export MCD_MCP_TRANSPORT=http
-export MCD_MCP_URL="https://..."
+export MCD_MCP_TOKEN="<你的 MCP Token>"     # 只用环境变量，不要写进任何文件
+export MCD_MCP_TRANSPORT=streamablehttp     # 默认 stdio，必须显式改
+export MCD_MCP_URL="https://mcp.mcd.cn"     # 默认值，可省略
 ```
 
 MCP 至少需要能提供「菜单」和「优惠」两类能力。连上之后先跑一次自检，

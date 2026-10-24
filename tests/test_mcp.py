@@ -29,6 +29,46 @@ class TestScoreTool(unittest.TestCase):
         self.assertLess(score_tool(t, menu_cap), 0.45)
 
 
+class TestRealMcDonaldToolNames(unittest.TestCase):
+    """用麦当劳 MCP 官方公布的真实工具名校准关键词表。
+
+    工具清单来自 M-China/mcd-mcp-server 的 README。最初版本的关键词表里
+    没有 "meal"，query-meals 会被漏掉 —— 这组测试就是防止再退回去。
+    """
+
+    CASES = [
+        ("query-meals", "查询门店在售餐品与价格", "menu"),
+        ("query-meal-detail", "查询单个餐品详情", "menu"),
+        ("available-coupons", "查询当前可用优惠券", "coupon"),
+        ("query-store-coupons", "查询门店可用券", "coupon"),
+        ("calculate-price", "根据所选餐品计算价格，含优惠", "quote"),
+        ("list-nutrition-foods", "获取餐品营养成分数据", "nutrition"),
+        ("create-order", "创建订单", "order"),
+    ]
+
+    def test_each_maps_to_expected_capability(self):
+        from optimizer.mcp_client import CAPABILITIES
+        caps = {c.key: c for c in CAPABILITIES}
+        for name, desc, expected in self.CASES:
+            tool = {"name": name, "description": desc}
+            scored = {k: score_tool(tool, c) for k, c in caps.items()}
+            best = max(scored, key=lambda k: scored[k])
+            self.assertEqual(best, expected,
+                             f"{name} 被映射到 {best}（分数 {scored}），应为 {expected}")
+            self.assertGreater(scored[expected], 0.45,
+                               f"{name} 对 {expected} 的匹配分过低: {scored[expected]}")
+
+    def test_unrelated_tools_stay_unmatched(self):
+        from optimizer.mcp_client import CAPABILITIES
+        caps = {c.key: c for c in CAPABILITIES}
+        for name, desc in [("query-party-store", "查询派对门店"),
+                           ("draw-lottery", "抽奖"),
+                           ("now-time-info", "取服务器时间")]:
+            tool = {"name": name, "description": desc}
+            self.assertLess(score_tool(tool, caps["menu"]), 0.45,
+                            f"{name} 不该被当成菜单工具")
+
+
 class TestAgainstMockServer(unittest.TestCase):
     def setUp(self):
         self.client = MCPClient(transport="stdio",
