@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.DS_Store
+.idea/
+.vscode/
+
+# MCP 拉取的真实菜单缓存可能含门店信息，默认不入库
+cache/
+
+# 本地 MCP 配置（可能含密钥）
+.env
+mcp.local.json

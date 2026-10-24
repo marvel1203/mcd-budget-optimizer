@@ -1,0 +1,37 @@
+{
+  "_comment": "合成测试数据（SYNTHETIC）。价格与优惠规则均为随手编造的假数据，仅用于算法验证与演示，不代表麦当劳任何真实门店菜单。真实数据请通过 scripts/fetch_menu.py 从麦当劳 MCP 拉取。",
+  "meta": {
+    "source": "synthetic",
+    "store": "TEST-STORE-0001",
+    "generated_at": "2026-10-24T00:00:00+08:00",
+    "disclaimer": "假数据，勿用作真实点餐依据"
+  },
+  "items": [
+    {"id": "m-01", "name": "巨无霸", "price": 24.5, "category": "main", "tags": ["牛肉", "经典"], "available": true},
+    {"id": "m-02", "name": "麦香鸡", "price": 15.0, "category": "main", "tags": ["鸡肉"], "available": true},
+    {"id": "m-03", "name": "麦辣鸡腿堡", "price": 21.0, "category": "main", "tags": ["鸡肉", "辣"], "available": true},
+    {"id": "m-04", "name": "板烧鸡腿堡", "price": 22.0, "category": "main", "tags": ["鸡肉"], "available": true},
+    {"id": "m-05", "name": "双层吉士汉堡", "price": 18.5, "category": "main", "tags": ["牛肉"], "available": true},
+    {"id": "m-06", "name": "麦香鱼", "price": 16.0, "category": "main", "tags": ["鱼肉"], "available": true},
+    {"id": "m-07", "name": "吉士汉堡", "price": 12.0, "category": "main", "tags": ["牛肉"], "available": true},
+    {"id": "m-08", "name": "培根蔬萃双层牛堡", "price": 26.0, "category": "main", "tags": ["牛肉", "培根"], "available": false},
+    {"id": "s-01", "name": "中薯条", "price": 11.0, "category": "side", "tags": ["素食"], "available": true},
+    {"id": "s-02", "name": "大薯条", "price": 13.5, "category": "side", "tags": ["素食"], "available": true},
+    {"id": "s-03", "name": "麦乐鸡（5块）", "price": 13.0, "category": "side", "tags": ["鸡肉"], "available": true},
+    {"id": "s-04", "name": "麦辣鸡翅（2块）", "price": 14.0, "category": "side", "tags": ["鸡肉", "辣"], "available": true},
+    {"id": "s-05", "name": "玉米杯", "price": 8.0, "category": "side", "tags": ["素食"], "available": true},
+    {"id": "s-06", "name": "花生派", "price": 9.0, "category": "side", "tags": ["花生"], "available": true},
+    {"id": "d-01", "name": "中可乐", "price": 9.5, "category": "drink", "tags": ["碳酸"], "available": true},
+    {"id": "d-02", "name": "大雪碧", "price": 11.0, "category": "drink", "tags": ["碳酸"], "available": true},
+    {"id": "d-03", "name": "鲜煮咖啡", "price": 12.0, "category": "drink", "tags": ["咖啡"], "available": true},
+    {"id": "d-04", "name": "牛奶", "price": 8.0, "category": "drink", "tags": ["乳制品"], "available": true},
+    {"id": "d-05", "name": "橙汁", "price": 10.0, "category": "drink", "tags": ["果汁"], "available": true},
+    {"id": "t-01", "name": "香芋派", "price": 8.5, "category": "dessert", "tags": ["素食"], "available": true},
+    {"id": "t-02", "name": "麦旋风", "price": 12.0, "category": "dessert", "tags": ["乳制品"], "available": true}
+  ],
+  "rules": [
+    {"name": "满60减8", "minSpend": 60, "discount": 8},
+    {"name": "满100减15", "minSpend": 100, "discount": 15},
+    {"name": "1+1随心配", "size": 2, "fixedPrice": 13.9, "categories": ["side", "drink"]}
+  ]
+}
