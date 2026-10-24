@@ -45,6 +45,11 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {"lines": {"type": "array"}}},
     },
     {
+        "name": "list-nutrition-foods",
+        "description": "获取麦当劳餐品的营养成分数据，包括能量、蛋白质、脂肪、碳水化合物、钠等",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "weather_today",
         "description": "查询天气，和点餐无关，用于验证无关工具不会被误匹配",
         "inputSchema": {"type": "object", "properties": {"city": {"type": "string"}}},
@@ -80,6 +85,8 @@ def handle(msg: dict) -> dict | None:
             payload = {"items": data["items"]}
         elif name == "query_promotions":
             payload = {"rules": data["rules"]}
+        elif name == "list-nutrition-foods":
+            payload = {"foods": data.get("nutrition", [])}
         elif name == "cart_preview":
             payload = {"total": 0, "note": "mock 试算未实现计价逻辑"}
         elif name == "place_order":

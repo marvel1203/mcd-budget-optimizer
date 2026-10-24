@@ -59,6 +59,7 @@ python3 -m optimizer.cli --from-mcp --people 1 --slots main --verbose
 | 忌口/过敏 | 否 | `--avoid`，如 `花生,辣` |
 | 口味偏好 | 否 | `--prefer`，如 `牛肉` |
 | 同款上限 | 否，默认 2 | `--max-same` |
+| 营养信息 | 否 | 默认会尝试拉 `--no-nutrition` 可关闭 |
 
 **第二步：拉数据。** 优先走 MCP：
 
@@ -73,7 +74,8 @@ python3 -m optimizer.cli --menu cache/menu.json --people 3 --budget 90
 ```
 
 **第三步：读结果。** 输出是一张 Markdown 表 + 结算说明：原价、实付、
-省了多少、命中哪几条优惠、人均多少、预算是否超支。直接转述给用户，
+省了多少、命中哪几条优惠、人均多少、预算是否超支。若 MCP 提供了营养能力，
+还会多一列每份热量，以及总热量、人均热量、三大营养素。直接转述给用户，
 不要自己重新算一遍。
 
 **第四步：只在用户明确要求时才下单。** 本 Skill 默认只做规划，不碰 `order`

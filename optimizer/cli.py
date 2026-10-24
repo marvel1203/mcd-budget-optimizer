@@ -18,6 +18,7 @@ import sys
 from typing import Sequence
 
 from .models import CouponRule, Item, OrderSpec, Plan, PlanLine, item_from_raw, rule_from_raw
+from .nutrition import NutritionTable, load_nutrition_file, table_from_payload
 from .solver import InfeasibleError, solve
 from .mcp_client import client_from_env
 
@@ -39,8 +40,13 @@ def parse_tags(s: str | None) -> frozenset[str]:
     return frozenset(t.strip().lower() for t in s.replace("，", ",").split(",") if t.strip())
 
 
-def collect_from_mcp(store: str | None = None, verbose: bool = False) -> tuple[list[Item], list[CouponRule], list[str]]:
-    """通过 MCP 拉取菜单与优惠。返回 (商品, 规则, 过程说明)。"""
+def collect_from_mcp(store: str | None = None, verbose: bool = False,
+                     want_nutrition: bool = True):
+    """通过 MCP 拉取菜单、优惠与营养信息。
+
+    返回 (商品, 规则, 营养表, 过程说明)。营养是可选能力，
+    MCP 没提供或调用失败都不会中断主流程，只是营养表为空。
+    """
     notes: list[str] = []
     client = client_from_env()
     with client:
@@ -68,10 +74,20 @@ def collect_from_mcp(store: str | None = None, verbose: bool = False) -> tuple[l
         raw_coupon = (client.call_tool(bindings["coupon"].tool_name, args_for("coupon"))
                       if "coupon" in bindings else None)
 
+        raw_nutrition = None
+        if want_nutrition and "nutrition" in bindings:
+            try:
+                raw_nutrition = client.call_tool(bindings["nutrition"].tool_name,
+                                                 args_for("nutrition"))
+            except Exception as e:
+                notes.append(f"营养信息拉取失败，已跳过：{type(e).__name__}")
+
     items = _coerce_items(raw_menu)
     rules = _coerce_rules(raw_coupon)
-    notes.append(f"拉取到 {len(items)} 个商品、{len(rules)} 条可用优惠规则")
-    return items, rules, notes
+    nutrition = table_from_payload(raw_nutrition) if raw_nutrition is not None else NutritionTable([])
+    notes.append(f"拉取到 {len(items)} 个商品、{len(rules)} 条可用优惠规则"
+                 + (f"、{len(nutrition)} 条营养数据" if len(nutrition) else "（未提供营养数据）"))
+    return items, rules, nutrition, notes
 
 
 def _coerce_items(payload) -> list[Item]:
@@ -124,20 +140,46 @@ def _extract_rows(payload, keys: Sequence[str]) -> list:
     return []
 
 
-def render_markdown(plan: Plan, spec: OrderSpec, warnings: Sequence[str]) -> str:
+def render_markdown(plan: Plan, spec: OrderSpec, warnings: Sequence[str],
+                    nutrition: NutritionTable | None = None) -> str:
+    show_kcal = bool(nutrition) and any(
+        nutrition.lookup(l.item.name) is not None and
+        nutrition.lookup(l.item.name).kcal is not None
+        for l in plan.lines
+    )
     lines: list[str] = []
     lines.append("### 点餐方案")
     lines.append("")
-    lines.append("| 商品 | 单价 | 份数 | 小计 |")
-    lines.append("| --- | ---: | ---: | ---: |")
+    if show_kcal:
+        lines.append("| 商品 | 单价 | 份数 | 小计 | 热量/份 |")
+        lines.append("| --- | ---: | ---: | ---: | ---: |")
+    else:
+        lines.append("| 商品 | 单价 | 份数 | 小计 |")
+        lines.append("| --- | ---: | ---: | ---: |")
     for l in sorted(plan.lines, key=lambda x: (-x.qty, x.item.price_cents)):
-        lines.append(f"| {l.item.name} | {l.item.yuan:.2f} | {l.qty} | {l.subtotal_cents/100:.2f} |")
+        row = f"| {l.item.name} | {l.item.yuan:.2f} | {l.qty} | {l.subtotal_cents/100:.2f} "
+        if show_kcal:
+            n = nutrition.lookup(l.item.name)
+            row += f"| {int(round(n.kcal)) if n and n.kcal is not None else '—'} |"
+        lines.append(row)
     lines.append("")
     lines.append(f"- 原价合计：**{plan.subtotal_cents/100:.2f} 元**")
     lines.append(f"- 实付：**{plan.total_cents/100:.2f} 元**（共 {plan.item_count} 件，"
                  f"人均 {plan.per_person_cents(spec.people)/100:.2f} 元）")
     if plan.saved_cents:
         lines.append(f"- 省下：**{plan.saved_cents/100:.2f} 元**")
+    if show_kcal:
+        totals = nutrition.total_for(plan.lines)
+        kcal = totals.get("kcal")
+        if kcal is not None:
+            lines.append(f"- 总热量：**约 {int(round(kcal))} kcal**"
+                         f"（人均约 {int(round(kcal / max(1, spec.people)))} kcal）")
+        macros = []
+        for key, label in (("protein_g", "蛋白质"), ("fat_g", "脂肪"), ("carb_g", "碳水")):
+            if totals.get(key) is not None:
+                macros.append(f"{label} {totals[key]:.0f}g")
+        if macros:
+            lines.append(f"- 三大营养素：{'，'.join(macros)}")
     if plan.applied:
         lines.append("- 命中优惠：" + "；".join(plan.applied))
     else:
@@ -153,8 +195,9 @@ def render_markdown(plan: Plan, spec: OrderSpec, warnings: Sequence[str]) -> str
     return "\n".join(lines)
 
 
-def plan_to_dict(plan: Plan, spec: OrderSpec, warnings: Sequence[str]) -> dict:
-    return {
+def plan_to_dict(plan: Plan, spec: OrderSpec, warnings: Sequence[str],
+                 nutrition: NutritionTable | None = None) -> dict:
+    out = {
         "people": spec.people,
         "budget": spec.budget_cents / 100.0 if spec.budget_cents else None,
         "objective": spec.objective,
@@ -168,6 +211,15 @@ def plan_to_dict(plan: Plan, spec: OrderSpec, warnings: Sequence[str]) -> dict:
         "top_up_note": plan.top_up_note,
         "warnings": list(warnings),
     }
+    if nutrition and len(nutrition):
+        for l in out["items"]:
+            n = nutrition.lookup(l["name"])
+            if n is not None and n.kcal is not None:
+                l["kcal"] = round(n.kcal, 1)
+        totals = nutrition.total_for(plan.lines)
+        if totals:
+            out["nutrition_total"] = totals
+    return out
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -192,6 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="cheapest=最省钱；best=预算内吃最好（默认 cheapest）")
     p.add_argument("--no-top-up", action="store_true", help="关闭凑满减")
     p.add_argument("--store", default=None, help="门店 ID，传给 MCP")
+    p.add_argument("--nutrition", default=None,
+                   help="营养数据 JSON 文件路径（配合 --menu 离线使用）")
+    p.add_argument("--no-nutrition", action="store_true",
+                   help="不拉取营养信息（默认会尝试）")
     p.add_argument("--json", action="store_true", help="输出 JSON 而非 Markdown")
     p.add_argument("--verbose", action="store_true", help="打印 MCP 能力映射过程")
     return p
@@ -216,15 +272,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     warnings: list[str] = []
+    nutrition: NutritionTable | None = None
     try:
         if args.from_mcp:
-            from .models import load_menu
-            items, rules, notes = collect_from_mcp(args.store, args.verbose)
+            items, rules, nutrition, notes = collect_from_mcp(
+                args.store, args.verbose, want_nutrition=not args.no_nutrition)
             if args.verbose:
                 for n in notes:
                     print(n, file=sys.stderr)
         else:
             items, rules = _load_local(args.menu)
+            if args.nutrition:
+                nutrition = load_nutrition_file(args.nutrition)
     except (InfeasibleError, FileNotFoundError) as e:
         print(f"无法获取菜单: {e}", file=sys.stderr)
         return 3
@@ -243,10 +302,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 4
 
     if args.json:
-        print(json.dumps(plan_to_dict(result.plan, spec, result.warnings),
+        print(json.dumps(plan_to_dict(result.plan, spec, result.warnings, nutrition),
                          ensure_ascii=False, indent=2))
     else:
-        print(render_markdown(result.plan, spec, result.warnings))
+        print(render_markdown(result.plan, spec, result.warnings, nutrition))
     return 0
 
 

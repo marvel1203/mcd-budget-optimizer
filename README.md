@@ -34,25 +34,30 @@ $ python3 -m optimizer.cli --from-mcp --people 3 --budget 90 --slots main,drink 
 
 ### 点餐方案
 
-| 商品 | 单价 | 份数 | 小计 |
-| --- | ---: | ---: | ---: |
-| 吉士汉堡 | 12.00 | 2 | 24.00 |
-| 牛奶 | 8.00 | 1 | 8.00 |
-| 中可乐 | 9.50 | 1 | 9.50 |
-| 橙汁 | 10.00 | 1 | 10.00 |
-| 麦香鸡 | 15.00 | 1 | 15.00 |
+| 商品 | 单价 | 份数 | 小计 | 热量/份 |
+| --- | ---: | ---: | ---: | ---: |
+| 吉士汉堡 | 12.00 | 2 | 24.00 | 300 |
+| 牛奶 | 8.00 | 1 | 8.00 | 130 |
+| 玉米杯 | 8.00 | 1 | 8.00 | 90 |
+| 中可乐 | 9.50 | 1 | 9.50 | 150 |
+| 中薯条 | 11.00 | 1 | 11.00 | 320 |
 
-- 原价合计：66.50 元
-- 实付：52.90 元（共 6 件，人均 17.63 元）
-- 省下：13.60 元
-- 命中优惠：2 件 drink/side 合计 13.90（省 5.60）；满 60.00 减 8.00（省 8.00）
-- 预算 90.00 元：剩余 37.10 元
+- 原价合计：60.50 元
+- 实付：43.80 元（共 6 件，人均 21.90 元）
+- 省下：16.70 元
+- 总热量：约 1290 kcal（人均约 645 kcal）
+- 三大营养素：蛋白质 45g，脂肪 45g，碳水 171g
+- 命中优惠：满 60.00 减 8.00（省 8.00）；
+  2 件 drink/side 合计 13.90（省 6.60）；2 件 drink/side 合计 13.90（省 2.10）
 ```
 
+热量来自 MCP 的 `list-nutrition-foods`，是可选能力——MCP 没提供就不显示，
+不影响出方案。
+
 上面的演示走的是仓库自带的 mock MCP server（`tests/mock_mcp_server.py`），
-数据是 `tests/fixtures/synthetic_menu.json` 里的**合成假数据**，
-只为演示算法行为，不代表任何真实门店价格。接上真 MCP 后，同样的命令
-拿到的就是实时菜单。
+数据是 `tests/fixtures/` 下的**合成假数据**，
+只为演示算法行为，不代表任何真实门店价格或营养信息。接上真 MCP 后，
+同样的命令拿到的就是实时菜单。
 
 ## 快速开始
 
@@ -123,8 +128,20 @@ Token 只从环境变量读取，程序会自动加 `Authorization: Bearer` 头�
 | `--max-same` | 2 | 同一单品最多几份 |
 | `--objective` | `cheapest` | `cheapest` 最省 / `best` 预算内吃最好 |
 | `--no-top-up` | 关 | 关闭凑满减 |
+| `--nutrition` | 无 | 营养数据 JSON 文件（配合 `--menu` 离线使用） |
+| `--no-nutrition` | 关 | 不拉营养信息（默认会尝试，MCP 没有就自动跳过） |
 | `--json` | 关 | 输出 JSON |
 | `--store` | 无 | 门店 ID |
+
+## 营养信息
+
+除了多少钱，还能回答多少卡。输出会多一列每份热量，底部给出总热量、
+人均热量和三大营养素。数据来源是 MCP 的 `list-nutrition-foods`，
+**可选能力**——MCP 没提供、或你加 `--no-nutrition`，就不显示，不影响出方案。
+
+餐品名对不齐是常态（「麦香鱼」vs「麦香鱼堡」），所以匹配走
+「归一化精确匹配 → 双向包含匹配」；匹配不上就留空，
+不会填一个相近但错误的值。单位也做了处理：千焦会自动换算成大卡。
 
 ## 算法
 
@@ -164,12 +181,14 @@ optimizer/
   mcp_client.py               MCP 客户端 + 能力自适应映射
   solver.py                   组合求解（贪心 + 局部搜索 + 凑单）
   pricing.py                  优惠计价（bundle / threshold）
+  nutrition.py                营养信息归一化与模糊匹配（可选能力）
   cli.py                      命令行入口与渲染
 scripts/fetch_menu.py         从 MCP 拉菜单快照
 tests/
   mock_mcp_server.py          本地 mock MCP server
-  fixtures/synthetic_menu.json  合成测试数据
-  test_models.py  test_solver.py  test_mcp.py
+  fixtures/synthetic_menu.json      合成菜单测试数据
+  fixtures/synthetic_nutrition.json 合成营养测试数据
+  test_models.py  test_solver.py  test_mcp.py  test_nutrition.py
 ```
 
 ## 大赛信息

@@ -25,7 +25,7 @@
 | 优惠 | `available-coupons` | 拉取当前可用优惠券与活动（满减 / 随心配） | 是 |
 | 优惠 | `query-store-coupons` | 按门店过滤可用券 | 否 |
 | 试算 | `calculate-price` | 用官方口径复核实付金额 | 否 |
-| 营养 | `list-nutrition-foods` | 附带热量等营养信息 | 否 |
+| 营养 | `list-nutrition-foods` | 附带热量、蛋白质、脂肪、碳水等营养信息 | 否（已接入渲染） |
 | 下单 | `create-order` | 已识别但**默认不调用**，需用户显式确认 | 否 |
 
 `query-meals` 和 `available-coupons` 是硬需求，缺任一则直接报错退出，

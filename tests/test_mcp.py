@@ -100,7 +100,7 @@ class TestAgainstMockServer(unittest.TestCase):
         os.environ["MCD_MCP_TRANSPORT"] = "stdio"
         os.environ["MCD_MCP_COMMAND"] = f"{sys.executable} {MOCK}"
         try:
-            items, rules, notes = collect_from_mcp()
+            items, rules, nutrition, notes = collect_from_mcp()
         finally:
             os.environ.pop("MCD_MCP_COMMAND", None)
         self.assertGreater(len(items), 10)
@@ -109,6 +109,30 @@ class TestAgainstMockServer(unittest.TestCase):
         self.assertIn("threshold", kinds)
         self.assertIn("bundle_fixed", kinds)
         self.assertTrue(any("能力映射" in n for n in notes))
+
+    def test_nutrition_is_collected(self):
+        """营养是可选能力：mock server 提供了，就应该拉得到。"""
+        os.environ["MCD_MCP_TRANSPORT"] = "stdio"
+        os.environ["MCD_MCP_COMMAND"] = f"{sys.executable} {MOCK}"
+        try:
+            _, _, nutrition, notes = collect_from_mcp()
+        finally:
+            os.environ.pop("MCD_MCP_COMMAND", None)
+        self.assertGreater(len(nutrition), 10)
+        hit = nutrition.lookup("巨无霸")
+        self.assertIsNotNone(hit)
+        self.assertAlmostEqual(hit.kcal, 550.0)
+        self.assertTrue(any("营养数据" in n for n in notes))
+
+    def test_nutrition_failure_is_non_fatal(self):
+        """关掉营养请求时不应报错，只是拿不到。"""
+        os.environ["MCD_MCP_TRANSPORT"] = "stdio"
+        os.environ["MCD_MCP_COMMAND"] = f"{sys.executable} {MOCK}"
+        try:
+            _, _, nutrition, _ = collect_from_mcp(want_nutrition=False)
+        finally:
+            os.environ.pop("MCD_MCP_COMMAND", None)
+        self.assertEqual(len(nutrition), 0)
 
 
 if __name__ == "__main__":
