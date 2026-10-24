@@ -3,7 +3,8 @@
 > 给一群人点麦当劳，最难的不是选什么，是算清楚怎么凑最划算。
 > 人数、预算、忌口丢进来，通过麦当劳 MCP 拉实时菜单和优惠，算出最省的那套搭配。
 
-本项目是 [WorkBuddy × 麦当劳程序员创意大赛](https://github.com) 参赛作品。
+本项目是 [麦当劳程序员节创意开发大赛](https://github.com/M-China/mcd-developer-innovation-challenge)
+参赛作品，基于麦当劳 MCP 开发，并使用 WorkBuddy 完成整个开发过程。
 
 ---
 
